@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SomeeStyle Pencil Sketch Converter</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Inter:wght@300;400;600&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        
+        .heading-font {
+            font-family: 'Playfair Display', serif;
+        }
+        
+        .upload-zone {
+            border: 3px dashed #cbd5e1;
+            transition: all 0.3s ease;
+        }
+        
+        .upload-zone:hover {
+            border-color: #3b82f6;
+            background: #f0f9ff;
+        }
+        
+        .upload-zone.dragging {
+            border-color: #2563eb;
+            background: #dbeafe;
+        }
+        
+        .slider {
+            width: 100%;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div id="root"></div>
+
+    <script>
+        // Pure JavaScript Image Processing - No React needed for simplicity
+        
+        class PencilSketchConverter {
+            constructor() {
+                this.uploadedImage = null;
+                this.originalCanvas = document.createElement('canvas');
+                this.sketchCanvas = document.createElement('canvas');
+                this.originalCtx = this.originalCanvas.getContext('2d');
+                this.sketchCtx = this.sketchCanvas.getContext('2d');
+                
+                // Default settings
+                this.settings = {
+                    brightness: 20,      // Increase brightness
+                    contrast: 30,        // Increase contrast
+                    edgeStrength: 80,    // Edge detection strength
+                    blur: 2,             // Slight blur for pencil effect
+                    graininess: 15       // Pencil grain texture
+                };
+            }
+            
+            loadImage(file) {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const img = new Image();
+                        img.onload = () => {
+                            this.uploadedImage = img;
+                            resolve(img);
+                        };
+                        img.onerror = reject;
+                        img.src = e.target.result;
+                    };
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                });
+            }
+            
+            convertToPencilSketch() {
+                if (!this.uploadedImage) return null;
+                
+                const img = this.uploadedImage;
+                
+                // Set canvas size
+                this.originalCanvas.width = img.width;
+                this.originalCanvas.height = img.height;
+                this.sketchCanvas.width = img.width;
+                this.sketchCanvas.height = img.height;
+                
+                // Draw original image
+                this.originalCtx.drawImage(img, 0, 0);
+                
+                // Get image data
+                let imageData = this.originalCtx.getImageData(0, 0, img.width, img.height);
+                
+                // Step 1: Convert to grayscale
+                imageData = this.toGrayscale(imageData);
+                
+                // Step 2: Increase brightness
+                imageData = this.adjustBrightness(imageData, this.settings.brightness);
+                
+                // Step 3: Increase contrast
+                imageData = this.adjustContrast(imageData, this.settings.contrast);
+                
+                // Step 4: Invert colors
+                const invertedData = this.invertColors(imageData);
+                
+                // Step 5: Apply blur to inverted image
+                const blurredData = this.applyGaussianBlur(invertedData, this.settings.blur);
+                
+                // Step 6: Blend original and inverted-blurred (Dodge blend)
+                imageData = this.dodgeBlend(imageData, blurredData);
+                
+                // Step 7: Enhance edges
+                imageData = this.enhanceEdges(imageData, this.settings.edgeStrength);
+                
+                // Step 8: Add pencil grain texture
+                imageData = this.addPencilGrain(imageData, this.settings.graininess);
+                
+                // Step 9: Final contrast adjustment
+                imageData = this.adjustContrast(imageData, 20);
+                
+                // Put processed image on canvas
+                this.sketchCtx.putImageData(imageData, 0, 0);
+                
+                return this.sketchCanvas.toDataURL('image/png');
+            }
+            
+            toGrayscale(imageData) {
+                const data = imageData.data;
+                for (let i = 0; i < data.length; i += 4) {
+                    const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+                    data[i] = gray;
+                    data[i + 1] = gray;
+                    data[i + 2] = gray;
+                }
+                return imageData;
+            }
+            
+            adjustBrightness(imageData, brightness) {
+                const data = imageData.data;
+                const adjust = brightness;
+                for (let i = 0; i < data.length; i += 4) {
+                    data[i] = Math.min(255, data[i] + adjust);
+                    data[i + 1] = Math.min(255, data[i + 1] + adjust);
+                    data[i + 2] = Math.min(255, data[i + 2] + adjust);
+                }
+                return imageData;
+            }
+            
+            adjustContrast(imageData, contrast) {
+                const data = imageData.data;
+                const factor = (259 * (contrast + 255)) / (255 * (259 - contrast));
+                
+                for (let i = 0; i < data.length; i += 4) {
+                    data[i] = Math.min(255, Math.max(0, factor * (data[i] - 128) + 128));
+                    data[i + 1] = Math.min(255, Math.max(0, factor * (data[i + 1] - 128) + 128));
+                    data[i + 2] = Math.min(255, Math.max(0, factor * (data[i + 2] - 128) + 128));
+                }
+                return imageData;
+            }
+            
+            invertColors(imageData) {
+                const inverted = new ImageData(
+                    new Uint8ClampedArray(imageData.data),
+                    imageData.width,
+                    imageData.height
+                );
+                const data = inverted.data;
+                
+                for (let i = 0; i < data.length; i += 4) {
+                    data[i] = 255 - data[i];
+                    data[i + 1] = 255 - data[i + 1];
+                    data[i + 2] = 255 - data[i + 2];
+                }
+                return inverted;
+            }
+            
+            applyGaussianBlur(imageData, radius) {
+                // Simple box blur approximation
+                const data = imageData.data;
+                const width = imageData.width;
+                const height = imageData.height;
+                
+                const blurred = new ImageData(width, height);
+                const blurData = blurred.data;
+                
+                const kernel = Math.round(radius);
+                
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        let r = 0, g = 0, b = 0, count = 0;
+                        
+                        for (let ky = -kernel; ky <= kernel; ky++) {
+                            for (let kx = -kernel; kx <= kernel; kx++) {
+                                const px = x + kx;
+                                const py = y + ky;
+                                
+                                if (px >= 0 && px < width && py >= 0 && py < height) {
+                                    const idx = (py * width + px) * 4;
+                                    r += data[idx];
+                                    g += data[idx + 1];
+                                    b += data[idx + 2];
+                                    count++;
+                                }
+                            }
+                        }
+                        
+                        const idx = (y * width + x) * 4;
+                        blurData[idx] = r / count;
+                        blurData[idx + 1] = g / count;
+                        blurData[idx + 2] = b / count;
+                        blurData[idx + 3] = 255;
+                    }
+                }
+                
+                return blurred;
+            }
+            
+            dodgeBlend(base, blend) {
+                const result = new ImageData(base.width, base.height);
+                const baseData = base.data;
+                const blendData = blend.data;
+                const resultData = result.data;
+                
+                for (let i = 0; i < baseData.length; i += 4) {
+                    resultData[i] = Math.min(255, (baseData[i] * 256) / (255 - blendData[i] + 1));
+                    resultData[i + 1] = Math.min(255, (baseData[i + 1] * 256) / (255 - blendData[i + 1] + 1));
+                    resultData[i + 2] = Math.min(255, (baseData[i + 2] * 256) / (255 - blendData[i + 2] + 1));
+                    resultData[i + 3] = 255;
+                }
+                
+                return result;
+            }
+            
+            enhanceEdges(imageData, strength) {
+                const data = imageData.data;
+                const width = imageData.width;
+                const height = imageData.height;
+                
+                const edges = new ImageData(width, height);
+                const edgeData = edges.data;
+                
+                // Sobel edge detection
+                for (let y = 1; y < height - 1; y++) {
+                    for (let x = 1; x < width - 1; x++) {
+                        const idx = (y * width + x) * 4;
+                        
+                        // Get surrounding pixels
+                        const tl = data[((y-1) * width + (x-1)) * 4];
+                        const tc = data[((y-1) * width + x) * 4];
+                        const tr = data[((y-1) * width + (x+1)) * 4];
+                        const ml = data[(y * width + (x-1)) * 4];
+                        const mr = data[(y * width + (x+1)) * 4];
+                        const bl = data[((y+1) * width + (x-1)) * 4];
+                        const bc = data[((y+1) * width + x) * 4];
+                        const br = data[((y+1) * width + (x+1)) * 4];
+                        
+                        // Sobel kernels
+                        const gx = -tl + tr - 2*ml + 2*mr - bl + br;
+                        const gy = -tl - 2*tc - tr + bl + 2*bc + br;
+                        
+                        const edge = Math.sqrt(gx * gx + gy * gy);
+                        const enhanced = Math.min(255, data[idx] + edge * (strength / 100));
+                        
+                        edgeData[idx] = enhanced;
+                        edgeData[idx + 1] = enhanced;
+                        edgeData[idx + 2] = enhanced;
+                        edgeData[idx + 3] = 255;
+                    }
+                }
+                
+                return edges;
+            }
+            
+            addPencilGrain(imageData, graininess) {
+                const data = imageData.data;
+                const strength = graininess / 100;
+                
+                for (let i = 0; i < data.length; i += 4) {
+                    const noise = (Math.random() - 0.5) * 50 * strength;
+                    data[i] = Math.min(255, Math.max(0, data[i] + noise));
+                    data[i + 1] = Math.min(255, Math.max(0, data[i + 1] + noise));
+                    data[i + 2] = Math.min(255, Math.max(0, data[i + 2] + noise));
+                }
+                
+                return imageData;
+            }
+            
+            updateSettings(newSettings) {
+                this.settings = { ...this.settings, ...newSettings };
+            }
+        }
+        
+        // Initialize app
+        const converter = new PencilSketchConverter();
+        let currentFile = null;
+        
+        function initApp() {
+            const root = document.getElementById('root');
+            root.innerHTML = `
+                <header class="bg-white shadow-sm border-b border-gray-200">
+                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+                        <h1 class="text-4xl font-bold heading-font text-gray-900">
+                            SomeeStyle Pencil Sketch Converter
+                        </h1>
+                        <p class="mt-2 text-gray-600">
+                            Instant pencil sketch conversion - No AI needed!
+                        </p>
+                    </div>
+                </header>
+                
+                <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+                    <div class="grid md:grid-cols-2 gap-8 mb-12">
+                        <!-- Upload Section -->
+                        <div>
+                            <h2 class="text-2xl font-bold mb-4 heading-font">1. Upload Your Photo</h2>
+                            <div id="uploadZone" class="upload-zone rounded-xl p-8 text-center cursor-pointer">
+                                <input type="file" id="fileInput" accept="image/*" class="hidden">
+                                <div id="uploadContent" class="py-12">
+                                    <svg class="mx-auto h-16 w-16 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                    </svg>
+                                    <p class="mt-4 text-lg font-medium text-gray-700">
+                                        Drop your photo here or click to browse
+                                    </p>
+                                    <p class="mt-2 text-sm text-gray-500">
+                                        PNG, JPG up to 10MB
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Controls Section -->
+                        <div>
+                            <h2 class="text-2xl font-bold mb-4 heading-font">2. Adjust Settings</h2>
+                            <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-200 space-y-4">
+                                <div>
+                                    <label class="block text-sm font-medium mb-2">Brightness: <span id="brightnessValue">20</span></label>
+                                    <input type="range" id="brightness" min="0" max="50" value="20" class="slider">
+                                </div>
+                                
+                                <div>
+                                    <label class="block text-sm font-medium mb-2">Contrast: <span id="contrastValue">30</span></label>
+                                    <input type="range" id="contrast" min="0" max="60" value="30" class="slider">
+                                </div>
+                                
+                                <div>
+                                    <label class="block text-sm font-medium mb-2">Edge Strength: <span id="edgeValue">80</span></label>
+                                    <input type="range" id="edgeStrength" min="0" max="100" value="80" class="slider">
+                                </div>
+                                
+                                <div>
+                                    <label class="block text-sm font-medium mb-2">Pencil Texture: <span id="grainValue">15</span></label>
+                                    <input type="range" id="graininess" min="0" max="30" value="15" class="slider">
+                                </div>
+                                
+                                <button id="convertBtn" disabled class="w-full mt-6 py-4 rounded-lg font-semibold text-lg bg-gray-300 text-gray-500 cursor-not-allowed">
+                                    ✨ Convert to Pencil Sketch
+                                </button>
+                                
+                                <button id="resetBtn" class="w-full py-2 rounded-lg font-medium bg-gray-100 hover:bg-gray-200">
+                                    🔄 Reset Settings
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Result Section -->
+                    <div id="resultSection" class="hidden mb-12">
+                        <h2 class="text-2xl font-bold mb-4 heading-font">3. Your Pencil Sketch</h2>
+                        <div class="bg-white rounded-xl p-6 shadow-lg border border-gray-200">
+                            <img id="resultImage" class="max-w-full mx-auto rounded-lg shadow-xl">
+                            <div class="mt-6 flex gap-4 justify-center">
+                                <button id="downloadBtn" class="px-8 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg">
+                                    ⬇️ Download High-Res
+                                </button>
+                                <button id="newBtn" class="px-8 py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold rounded-lg">
+                                    🔄 New Image
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Info Section -->
+                    <div class="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-8 border border-blue-100">
+                        <h2 class="text-3xl font-bold mb-6 heading-font text-center">How It Works</h2>
+                        <div class="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+                            <div class="text-center">
+                                <div class="text-4xl mb-3">⚡</div>
+                                <h3 class="font-semibold mb-2">Instant Processing</h3>
+                                <p class="text-sm text-gray-600">
+                                    Pure image processing - no AI, no waiting
+                                </p>
+                            </div>
+                            <div class="text-center">
+                                <div class="text-4xl mb-3">🎯</div>
+                                <h3 class="font-semibold mb-2">100% Resemblance</h3>
+                                <p class="text-sm text-gray-600">
+                                    Perfect face preservation with pencil effect
+                                </p>
+                            </div>
+                            <div class="text-center">
+                                <div class="text-4xl mb-3">💰</div>
+                                <h3 class="font-semibold mb-2">Free Forever</h3>
+                                <p class="text-sm text-gray-600">
+                                    No API costs, works offline
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </main>
+            `;
+            
+            setupEventListeners();
+        }
+        
+        function setupEventListeners() {
+            const uploadZone = document.getElementById('uploadZone');
+            const fileInput = document.getElementById('fileInput');
+            const convertBtn = document.getElementById('convertBtn');
+            const downloadBtn = document.getElementById('downloadBtn');
+            const newBtn = document.getElementById('newBtn');
+            const resetBtn = document.getElementById('resetBtn');
+            
+            // Upload zone click
+            uploadZone.addEventListener('click', () => fileInput.click());
+            
+            // File input change
+            fileInput.addEventListener('change', handleFileSelect);
+            
+            // Drag and drop
+            uploadZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadZone.classList.add('dragging');
+            });
+            
+            uploadZone.addEventListener('dragleave', () => {
+                uploadZone.classList.remove('dragging');
+            });
+            
+            uploadZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadZone.classList.remove('dragging');
+                if (e.dataTransfer.files.length) {
+                    handleFile(e.dataTransfer.files[0]);
+                }
+            });
+            
+            // Convert button
+            convertBtn.addEventListener('click', convertImage);
+            
+            // Download button
+            downloadBtn.addEventListener('click', downloadImage);
+            
+            // New button
+            newBtn.addEventListener('click', resetApp);
+            
+            // Reset settings
+            resetBtn.addEventListener('click', resetSettings);
+            
+            // Sliders
+            ['brightness', 'contrast', 'edgeStrength', 'graininess'].forEach(id => {
+                const slider = document.getElementById(id);
+                const value = document.getElementById(id + 'Value');
+                slider.addEventListener('input', (e) => {
+                    value.textContent = e.target.value;
+                });
+            });
+        }
+        
+        function handleFileSelect(e) {
+            if (e.target.files.length) {
+                handleFile(e.target.files[0]);
+            }
+        }
+        
+        async function handleFile(file) {
+            if (!file.type.startsWith('image/')) {
+                alert('Please upload an image file');
+                return;
+            }
+            
+            if (file.size > 10 * 1024 * 1024) {
+                alert('Image size must be less than 10MB');
+                return;
+            }
+            
+            currentFile = file;
+            
+            try {
+                await converter.loadImage(file);
+                
+                // Show image preview
+                const uploadContent = document.getElementById('uploadContent');
+                uploadContent.innerHTML = `
+                    <img src="${URL.createObjectURL(file)}" class="max-h-96 mx-auto rounded-lg shadow-lg">
+                    <p class="mt-4 text-sm text-gray-600">Click to change image</p>
+                `;
+                
+                // Enable convert button
+                const convertBtn = document.getElementById('convertBtn');
+                convertBtn.disabled = false;
+                convertBtn.className = 'w-full mt-6 py-4 rounded-lg font-semibold text-lg bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl transition cursor-pointer';
+                
+                // Hide result
+                document.getElementById('resultSection').classList.add('hidden');
+                
+            } catch (error) {
+                console.error('Error loading image:', error);
+                alert('Error loading image. Please try another file.');
+            }
+        }
+        
+        function convertImage() {
+            if (!converter.uploadedImage) return;
+            
+            const convertBtn = document.getElementById('convertBtn');
+            convertBtn.textContent = '⏳ Converting...';
+            convertBtn.disabled = true;
+            
+            // Get settings
+            converter.updateSettings({
+                brightness: parseInt(document.getElementById('brightness').value),
+                contrast: parseInt(document.getElementById('contrast').value),
+                edgeStrength: parseInt(document.getElementById('edgeStrength').value),
+                graininess: parseInt(document.getElementById('graininess').value)
+            });
+            
+            // Convert (async to not block UI)
+            setTimeout(() => {
+                try {
+                    const result = converter.convertToPencilSketch();
+                    
+                    // Show result
+                    document.getElementById('resultImage').src = result;
+                    document.getElementById('resultSection').classList.remove('hidden');
+                    
+                    // Scroll to result
+                    document.getElementById('resultSection').scrollIntoView({ behavior: 'smooth' });
+                    
+                    // Reset button
+                    convertBtn.textContent = '✨ Convert to Pencil Sketch';
+                    convertBtn.disabled = false;
+                    
+                } catch (error) {
+                    console.error('Conversion error:', error);
+                    alert('Error converting image. Please try again.');
+                    convertBtn.textContent = '✨ Convert to Pencil Sketch';
+                    convertBtn.disabled = false;
+                }
+            }, 100);
+        }
+        
+        function downloadImage() {
+            const resultImage = document.getElementById('resultImage');
+            const link = document.createElement('a');
+            link.href = resultImage.src;
+            link.download = `SomeeStyle_Pencil_Sketch_${Date.now()}.png`;
+            link.click();
+        }
+        
+        function resetApp() {
+            currentFile = null;
+            converter.uploadedImage = null;
+            
+            document.getElementById('uploadContent').innerHTML = `
+                <div class="py-12">
+                    <svg class="mx-auto h-16 w-16 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
+                    <p class="mt-4 text-lg font-medium text-gray-700">
+                        Drop your photo here or click to browse
+                    </p>
+                    <p class="mt-2 text-sm text-gray-500">
+                        PNG, JPG up to 10MB
+                    </p>
+                </div>
+            `;
+            
+            const convertBtn = document.getElementById('convertBtn');
+            convertBtn.disabled = true;
+            convertBtn.className = 'w-full mt-6 py-4 rounded-lg font-semibold text-lg bg-gray-300 text-gray-500 cursor-not-allowed';
+            
+            document.getElementById('resultSection').classList.add('hidden');
+            document.getElementById('fileInput').value = '';
+        }
+        
+        function resetSettings() {
+            document.getElementById('brightness').value = 20;
+            document.getElementById('brightnessValue').textContent = '20';
+            document.getElementById('contrast').value = 30;
+            document.getElementById('contrastValue').textContent = '30';
+            document.getElementById('edgeStrength').value = 80;
+            document.getElementById('edgeValue').textContent = '80';
+            document.getElementById('graininess').value = 15;
+            document.getElementById('grainValue').textContent = '15';
+        }
+        
+        // Initialize app on load
+        document.addEventListener('DOMContentLoaded', initApp);
+    </script>
+</body>
+</html>
