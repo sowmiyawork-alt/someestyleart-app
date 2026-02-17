@@ -1,0 +1,12 @@
+{
+“rewrites”: [
+{
+“source”: “/”,
+“destination”: “/pencil-sketch-converter.html”
+},
+{
+“source”: “/(.*)”,
+“destination”: “/pencil-sketch-converter.html”
+}
+]
+}
