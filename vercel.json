@@ -1,8 +1,8 @@
 {
-“routes”: 
-{
-“src”: “/”,
-“dest”: “/pencil-sketch-converter.html”
-}
-
+  "routes": [
+    {
+      "src": "/",
+      "dest": "/pencil-sketch-converter.html"
+    }
+  ]
 }
