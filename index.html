@@ -82,10 +82,10 @@
                     },
                     balanced: {
                         name: 'Balanced',
-                        edgeIntensity: 0.75,
-                        shadingIntensity: 0.65,
+                        edgeIntensity: 0.85,
+                        shadingIntensity: 1.0,
                         detailLevel: 0.85,
-                        hatchingAmount: 0.5,
+                        hatchingAmount: 0.65,
                         pencilGrain: 0.35
                     },
                     detailed: {
@@ -375,25 +375,26 @@
             }
             
             dodgeBlend(base, blend) {
-                const result = new ImageData(base.width, base.height);
-                const baseData = base.data;
-                const blendData = blend.data;
-                const resultData = result.data;
-                
-                for (let i = 0; i < baseData.length; i += 4) {
-                    // Color dodge blend mode
-                    const divisor = 255 - blendData[i];
-                    let value;
-                    if (divisor === 0) {
-                        value = 255;
-                    } else {
-                        value = Math.min(255, (baseData[i] * 256) / (divisor + 1));
-                    }
-                    resultData[i] = resultData[i + 1] = resultData[i + 2] = value;
-                    resultData[i + 3] = 255;
-                }
-                
-                return result;
+                 const result = new ImageData(base.width, base.height);
+  const baseData = base.data;
+  const blendData = blend.data;
+  const resultData = result.data;
+
+  const gain = 0.92; // <1 darker, >1 lighter (try 0.85..1.05)
+
+  for (let i = 0; i < baseData.length; i += 4) {
+    const divisor = 255 - blendData[i];
+    let value;
+    if (divisor === 0) value = 255;
+    else value = Math.min(255, (baseData[i] * 256) / (divisor + 1));
+
+    value = Math.max(0, Math.min(255, value * gain));
+
+    resultData[i] = resultData[i + 1] = resultData[i + 2] = value;
+    resultData[i + 3] = 255;
+  }
+
+  return result;
             }
             
             multiScaleEdgeDetection(imageData, intensity) {
