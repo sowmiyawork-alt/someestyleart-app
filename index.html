@@ -543,25 +543,29 @@
             }
             
             finalToneMapping(imageData, shadingIntensity) {
-                const data = imageData.data;
-                
-                // S-curve for better tonal distribution
-                for (let i = 0; i < data.length; i += 4) {
-                    const value = data[i] / 255;
-                    
-                    // S-curve function
-                    const mapped = value < 0.5
-                        ? 2 * value * value
-                        : 1 - 2 * (1 - value) * (1 - value);
-                    
-                    // Apply shading intensity
-                    const final = mapped * (1 - shadingIntensity * 0.3) + (value * shadingIntensity * 0.3);
-                    
-                    // Slight brightness boost for pencil look
-                    const boosted = Math.min(1, final * 1.1 + 0.05);
-                    
-                    data[i] = data[i + 1] = data[i + 2] = boosted * 255;
-                }
+                 const data = imageData.data;
+
+  // shadingIntensity: treat 0.4..1.6 as useful range
+  const contrast = 1 + shadingIntensity * 0.9;     // higher = more light/shade
+  const exposure = 0.05 - shadingIntensity * 0.03; // higher intensity -> slightly darker
+
+  for (let i = 0; i < data.length; i += 4) {
+    let v = data[i] / 255;
+
+    // Apply exposure (shift)
+    v = Math.min(1, Math.max(0, v + exposure));
+
+    // Apply contrast around mid-gray (0.5)
+    v = (v - 0.5) * contrast + 0.5;
+
+    // Optional gentle S-curve to look more "pencil"
+    v = v < 0.5 ? 2 * v * v : 1 - 2 * (1 - v) * (1 - v);
+
+    v = Math.min(1, Math.max(0, v));
+    const out = Math.round(v * 255);
+
+    data[i] = data[i + 1] = data[i + 2] = out;
+                  }
                 
                 return imageData;
             }
