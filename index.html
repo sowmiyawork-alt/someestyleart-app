@@ -82,10 +82,10 @@
                     },
                     balanced: {
                         name: 'Balanced',
-                        edgeIntensity: 0.85,
-                        shadingIntensity: 1.0,
+                        edgeIntensity: 0.75,
+                        shadingIntensity: 0.65,
                         detailLevel: 0.85,
-                        hatchingAmount: 0.65,
+                        hatchingAmount: 0.5,
                         pencilGrain: 0.35
                     },
                     detailed: {
@@ -375,26 +375,25 @@
             }
             
             dodgeBlend(base, blend) {
-                 const result = new ImageData(base.width, base.height);
-  const baseData = base.data;
-  const blendData = blend.data;
-  const resultData = result.data;
-
-  const gain = 0.92; // <1 darker, >1 lighter (try 0.85..1.05)
-
-  for (let i = 0; i < baseData.length; i += 4) {
-    const divisor = 255 - blendData[i];
-    let value;
-    if (divisor === 0) value = 255;
-    else value = Math.min(255, (baseData[i] * 256) / (divisor + 1));
-
-    value = Math.max(0, Math.min(255, value * gain));
-
-    resultData[i] = resultData[i + 1] = resultData[i + 2] = value;
-    resultData[i + 3] = 255;
-  }
-
-  return result;
+                const result = new ImageData(base.width, base.height);
+                const baseData = base.data;
+                const blendData = blend.data;
+                const resultData = result.data;
+                
+                for (let i = 0; i < baseData.length; i += 4) {
+                    // Color dodge blend mode
+                    const divisor = 255 - blendData[i];
+                    let value;
+                    if (divisor === 0) {
+                        value = 255;
+                    } else {
+                        value = Math.min(255, (baseData[i] * 256) / (divisor + 1));
+                    }
+                    resultData[i] = resultData[i + 1] = resultData[i + 2] = value;
+                    resultData[i + 3] = 255;
+                }
+                
+                return result;
             }
             
             multiScaleEdgeDetection(imageData, intensity) {
@@ -544,29 +543,25 @@
             }
             
             finalToneMapping(imageData, shadingIntensity) {
-                 const data = imageData.data;
-
-  // shadingIntensity: treat 0.4..1.6 as useful range
-  const contrast = 1 + shadingIntensity * 0.9;     // higher = more light/shade
-  const exposure = 0.05 - shadingIntensity * 0.03; // higher intensity -> slightly darker
-
-  for (let i = 0; i < data.length; i += 4) {
-    let v = data[i] / 255;
-
-    // Apply exposure (shift)
-    v = Math.min(1, Math.max(0, v + exposure));
-
-    // Apply contrast around mid-gray (0.5)
-    v = (v - 0.5) * contrast + 0.5;
-
-    // Optional gentle S-curve to look more "pencil"
-    v = v < 0.5 ? 2 * v * v : 1 - 2 * (1 - v) * (1 - v);
-
-    v = Math.min(1, Math.max(0, v));
-    const out = Math.round(v * 255);
-
-    data[i] = data[i + 1] = data[i + 2] = out;
-                  }
+                const data = imageData.data;
+                
+                // S-curve for better tonal distribution
+                for (let i = 0; i < data.length; i += 4) {
+                    const value = data[i] / 255;
+                    
+                    // S-curve function
+                    const mapped = value < 0.5
+                        ? 2 * value * value
+                        : 1 - 2 * (1 - value) * (1 - value);
+                    
+                    // Apply shading intensity
+                    const final = mapped * (1 - shadingIntensity * 0.3) + (value * shadingIntensity * 0.3);
+                    
+                    // Slight brightness boost for pencil look
+                    const boosted = Math.min(1, final * 1.1 + 0.05);
+                    
+                    data[i] = data[i + 1] = data[i + 2] = boosted * 255;
+                }
                 
                 return imageData;
             }
